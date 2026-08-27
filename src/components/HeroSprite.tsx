@@ -433,6 +433,39 @@ const BOSS_ART = `
 export function BossSprite({ themeId, size = 120, className = '', animate = true, isHit = false, isDefeated = false }: BossProps) {
   // Use new boss sprites from BossSprites.tsx
   const bossData = BOSS_SPRITES[themeId];
+  
+  // Check if this boss uses an image sprite
+  if (bossData && 'spriteImage' in bossData && bossData.spriteImage) {
+    const idleClass = animate ? 'boss-idle' : '';
+    const hitClass = isHit ? 'sprite-hit' : '';
+    const defeatClass = isDefeated ? 'sprite-defeat' : '';
+    
+    return (
+      <div
+        className={`${idleClass} ${hitClass} ${defeatClass} ${className}`}
+        style={{
+          width: size,
+          height: size,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <img
+          src={bossData.spriteImage}
+          alt="Boss"
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain',
+            imageRendering: 'auto',
+            filter: isHit ? 'brightness(2) saturate(0)' : 'none',
+          }}
+        />
+      </div>
+    );
+  }
+
   if (!bossData) {
     // Fallback to old implementation
     const palette = BOSS_PALETTES[themeId] || BOSS_PALETTES.Trevas;
@@ -489,8 +522,9 @@ export function BossSprite({ themeId, size = 120, className = '', animate = true
     );
   }
 
-  // Use new boss sprites
-  const lines = bossData.pixels.trim().split('\n').map(l => l.split(''));
+  // Use new boss sprites (pixel art)
+  const pixelBossData = bossData as any;
+  const lines = pixelBossData.pixels.trim().split('\n').map(l => l.split(''));
   const pixelSize = size / 20;
 
   const rects: React.ReactNode[] = [];
@@ -500,7 +534,7 @@ export function BossSprite({ themeId, size = 120, className = '', animate = true
       if (ch === '.') continue;
       const colorFn = CHAR_TO_COLOR[ch];
       if (!colorFn) continue;
-      const color = colorFn(bossData.palette);
+      const color = colorFn(pixelBossData.palette);
       if (!color) continue;
       rects.push(
         <rect
@@ -515,7 +549,7 @@ export function BossSprite({ themeId, size = 120, className = '', animate = true
     }
   }
 
-  const idleClass = animate ? bossData.animationClass : '';
+  const idleClass = animate ? pixelBossData.animationClass : '';
   const hitClass = isHit ? 'sprite-hit' : '';
   const defeatClass = isDefeated ? 'sprite-defeat' : '';
 

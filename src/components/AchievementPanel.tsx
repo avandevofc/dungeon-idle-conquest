@@ -16,6 +16,9 @@ interface Props {
     crit: { totalCrits: number };
     prestige: { ascensions: number };
     skillPoints: number;
+    monstersDiscovered?: number;
+    bossesDiscovered?: number;
+    totalMonsters?: number;
   };
   onClose: () => void;
 }
@@ -195,6 +198,9 @@ export function AchievementPanel({ achievements, gameState, onClose }: Props) {
               case 'totalCrits': progress = gameState.crit.totalCrits; break;
               case 'ascensions': progress = gameState.prestige.ascensions; break;
               case 'totalSkillPoints': progress = gameState.skillPoints; break;
+              case 'monstersDiscovered': progress = (gameState as any).monstersDiscovered || 0; break;
+              case 'bossesDiscovered': progress = (gameState as any).bossesDiscovered || 0; break;
+              case 'allMonstersDiscovered': progress = (gameState as any).monstersDiscovered || 0; maxProgress = (gameState as any).totalMonsters || 1; break;
             }
 
             return (

@@ -136,11 +136,17 @@ export function getMonsterNames(): Record<string, string[]> {
 
 // ========== NOMES DE BOSSES POR TEMA ==========
 
-export const BOSS_NAMES: Record<string, { name: string; description: string; title: string }> = {
+export const BOSS_NAMES: Record<string, { name: string; description: string; title: string; sprite?: string }> = {
   'Trevas': {
     name: 'Lorde das Sombras',
     title: 'O Devorador de Luz',
     description: 'Uma entidade de pura escuridão que exists há mais tempo que as estrelas. Seu corpo é feito de sombras sólidas.',
+  },
+  'Cripta_Special': {
+    name: 'Dragão Esqueleto',
+    title: 'Chefe da Masmorra dos Mortos',
+    description: 'Nível 65. Um dragão esquelético ancestral que guarda a masmorra dos mortos. Seus ataques são devastadores: Sopro de Gelo e Garra de Osso. Suas asas ossadas cortam o ar, e seus olhos vermelhos brilham com fúria eterna.',
+    sprite: '/sprites/monsters/dragao-esqueletico.png',
   },
   'Vulcânica': {
     name: 'Senhor Vulcânico',

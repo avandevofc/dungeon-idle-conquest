@@ -128,23 +128,52 @@ export interface InventoryState {
   critDmgBonus: number;
 }
 
-// ========== PET SYSTEM ==========
+// ========== PET SYSTEM 2.0 ==========
+export type PetElement = 'fire' | 'ice' | 'shadow' | 'light' | 'nature' | 'chaos' | 'arcane' | 'mechanic';
 export type PetType = 'attack' | 'support' | 'tank' | 'utility';
+
+export interface PetPassive {
+  name: string;
+  description: string;
+  unlockLevel: number; // level needed to unlock
+  effect: (level: number) => number; // returns multiplier
+  effectLabel: string;
+}
+
+export interface PetActiveSkill {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  cooldown: number; // seconds
+  damage?: number; // % of DPS
+  heal?: number; // % of max HP
+  buff?: { stat: string; value: number; duration: number };
+  debuff?: { stat: string; value: number; duration: number };
+  aoe?: boolean;
+  dot?: { damage: number; duration: number };
+}
 
 export interface PetDef {
   id: string;
   name: string;
   icon: string;
   type: PetType;
+  element: PetElement;
   rarity: ItemRarity;
   description: string;
-  effect: string;
+  lore: string;
+  passives: PetPassive[];
+  activeSkill: PetActiveSkill;
   unlockCondition: string;
+  evolutionStages: string[]; // icons for each stage: egg → baby → young → adult → legendary
 }
 
 export interface PetState {
   id: string;
   level: number;
+  xp: number;
+  evolutionStage: number; // 0-4
   active: boolean;
 }
 
@@ -272,4 +301,5 @@ export interface GameState {
   activeSkills: ActiveSkillState[];
   achievements: AchievementState[];
   dailyRewards: DailyRewardState;
+  monsterCollection: string[]; // IDs dos monstros descobertos
 }

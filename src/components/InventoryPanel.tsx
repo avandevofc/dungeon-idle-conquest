@@ -12,12 +12,13 @@ interface Props {
   onEquip: (itemUid: string, heroId: string) => void;
   onUnequip: (itemUid: string) => void;
   onSell: (itemUid: string) => void;
+  onSellByRarity?: (rarity: string) => void;
   onEquipBestAll?: () => void;
 }
 
 const SLOT_ICONS: Record<string, string> = { weapon: '⚔️', armor: '🛡️', accessory: '💍' };
 
-export function InventoryPanel({ items, maxSlots, gold, heroes, heroDefs, onEquip, onUnequip, onSell, onEquipBestAll }: Props) {
+export function InventoryPanel({ items, maxSlots, gold, heroes, heroDefs, onEquip, onUnequip, onSell, onSellByRarity, onEquipBestAll }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
   const [tab, setTab] = useState<'all' | 'equipped'>('all');
   const filtered = tab === 'equipped' ? items.filter(i => i.equipped) : items;
@@ -53,6 +54,38 @@ export function InventoryPanel({ items, maxSlots, gold, heroes, heroDefs, onEqui
         >
           ⚡ EQUIPAR MELHORES
         </button>
+      )}
+
+      {/* Sell by Rarity */}
+      {onSellByRarity && (
+        <div className="mb-3">
+          <div className="text-[9px] text-[#475569] mb-1.5 font-medium">Vender por grau:</div>
+          <div className="flex gap-1 flex-wrap">
+            {([
+              { rarity: 'common', label: 'Comum', color: RARITY_COLORS.common },
+              { rarity: 'uncommon', label: 'Incomum', color: RARITY_COLORS.uncommon },
+              { rarity: 'rare', label: 'Raro', color: RARITY_COLORS.rare },
+              { rarity: 'epic', label: 'Épico', color: RARITY_COLORS.epic },
+            ]).map(r => {
+              const count = items.filter(i => !i.equipped && ITEMS.find(d => d.id === i.defId)?.rarity === r.rarity).length;
+              if (count === 0) return null;
+              return (
+                <button
+                  key={r.rarity}
+                  onClick={() => {
+                    if (confirm(`Vender todos os itens ${r.label} não equipados? (${count} itens)`)) {
+                      onSellByRarity(r.rarity);
+                    }
+                  }}
+                  className="px-2 py-1 rounded-lg text-[9px] font-bold transition-all cursor-pointer hover:opacity-80"
+                  style={{ background: `${r.color}15`, color: r.color, border: `1px solid ${r.color}30` }}
+                >
+                  🗑️ {r.label} ({count})
+                </button>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       <div className="grid grid-cols-5 gap-1.5 mb-3">

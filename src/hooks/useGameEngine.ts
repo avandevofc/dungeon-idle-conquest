@@ -12,6 +12,7 @@ import { generateDailyChallenge, SHOP_ITEMS } from '../data/shop';
 import { monsterHp, goldDrop, heroUpgradeCost, heroDamage, totalDps, dungeonMultiplier, getEnemyName, getEvolutionMultiplier } from '../utils/formatters';
 import { playSkillSound, playAchievementSound, playLevelUpSound } from '../utils/sounds';
 import { getEvolutionDef, getNextTier, getCurrentTier } from '../data/evolutions';
+import { getCollectionBonus, MONSTER_COLLECTION } from '../data/monsterCollection';
 
 const SAVE_KEY = 'dic_save_v2';
 const SAVE_INTERVAL = 30_000;
@@ -64,6 +65,7 @@ function getInitialState(): GameState {
       claimedToday: false,
       lastRewardIndex: 0,
     },
+    monsterCollection: [],
   };
 }
 
@@ -103,6 +105,7 @@ function loadSave(): GameState | null {
       activeSkills: parsed.activeSkills || [],
       achievements: parsed.achievements || [],
       dailyRewards: parsed.dailyRewards || { lastClaimDate: '', currentStreak: 0, longestStreak: 0, totalDaysClaimed: 0, claimedToday: false, lastRewardIndex: 0 },
+      monsterCollection: parsed.monsterCollection || [],
     };
   } catch { return null; }
 }
@@ -206,20 +209,73 @@ function computeSkillBonuses(skills: { id: string; level: number }[]) {
   return { dmgPct, critChance, critDmg, goldPct, itemChance, atkSpeedPct, manaBossPct };
 }
 
+import { PET_ELEMENTS, SYNERGY_COMBOS } from '../data/pets';
+
 function computePetBonuses(pets: PetState[], activePet: string | null) {
-  let dmgPct = 0, goldPct = 0, itemChance = 0, atkSpeedPct = 0;
-  if (!activePet) return { dmgPct, goldPct, itemChance, atkSpeedPct };
+  let dmgPct = 0, goldPct = 0, itemChance = 0, atkSpeedPct = 0, critChancePct = 0, hpPct = 0, manaDropPct = 0;
+  if (!activePet) return { dmgPct, goldPct, itemChance, atkSpeedPct, critChancePct, hpPct, manaDropPct };
   const pet = pets.find(p => p.id === activePet);
-  if (!pet) return { dmgPct, goldPct, itemChance, atkSpeedPct };
+  if (!pet) return { dmgPct, goldPct, itemChance, atkSpeedPct, critChancePct, hpPct, manaDropPct };
   const def = PET_DEFS.find(d => d.id === activePet);
-  if (!def) return { dmgPct, goldPct, itemChance, atkSpeedPct };
-  const lvlMult = 1 + (pet.level - 1) * 0.1;
-  switch (def.type) {
-    case 'attack': dmgPct += (def.id === 'phoenix' ? 100 : def.id === 'dragon_whelp' ? 50 : def.id === 'shadow_wolf' ? 30 : 15) * lvlMult; break;
-    case 'support': goldPct += (def.id === 'angel' ? 75 : def.id === 'spirit_wisp' ? 40 : 20) * lvlMult; break;
-    case 'utility': itemChance += (def.id === 'treasure_mimic' ? 50 : 20) * lvlMult; atkSpeedPct += (def.id === 'time_relic' ? 20 : 0) * lvlMult; break;
+  if (!def) return { dmgPct, goldPct, itemChance, atkSpeedPct, critChancePct, hpPct, manaDropPct };
+
+  // Apply unlocked passives based on pet level
+  for (const passive of def.passives) {
+    if (pet.level >= passive.unlockLevel) {
+      const val = passive.effect(pet.level);
+      // Parse the effect label to determine type
+      if (passive.effectLabel.includes('DPS') || passive.effectLabel.includes('Dano')) dmgPct += val * 100;
+      if (passive.effectLabel.includes('Ouro')) goldPct += val * 100;
+      if (passive.effectLabel.includes('Item')) itemChance += val * 100;
+      if (passive.effectLabel.includes('Vel.')) atkSpeedPct += val * 100;
+      if (passive.effectLabel.includes('Crítico')) critChancePct += val * 100;
+      if (passive.effectLabel.includes('HP')) hpPct += val * 100;
+      if (passive.effectLabel.includes('Mana')) manaDropPct += val * 100;
+    }
   }
-  return { dmgPct, goldPct, itemChance, atkSpeedPct };
+
+  // Level scaling: +2% per level
+  const lvlBonus = 1 + pet.level * 0.02;
+  dmgPct *= lvlBonus;
+  goldPct *= lvlBonus;
+
+  return { dmgPct, goldPct, itemChance, atkSpeedPct, critChancePct, hpPct, manaDropPct };
+}
+
+function computeSynergyBonus(pets: PetState[]): { dmgPct: number; goldPct: number; critPct: number } {
+  let dmgPct = 0, goldPct = 0, critPct = 0;
+  const ownedElements = pets.map(p => {
+    const def = PET_DEFS.find(d => d.id === p.id);
+    return def?.element;
+  }).filter(Boolean);
+
+  const elementCounts: Record<string, number> = {};
+  for (const el of ownedElements) {
+    if (el) elementCounts[el] = (elementCounts[el] || 0) + 1;
+  }
+
+  // Same element bonus: +5% DPS per pet of same element beyond the first
+  for (const [el, count] of Object.entries(elementCounts)) {
+    if (count >= 2) dmgPct += (count - 1) * 5;
+  }
+
+  // Check combo synergies
+  const uniqueElements = Object.keys(elementCounts);
+  for (let i = 0; i < uniqueElements.length; i++) {
+    for (let j = i + 1; j < uniqueElements.length; j++) {
+      const key1 = `${uniqueElements[i]}+${uniqueElements[j]}`;
+      const key2 = `${uniqueElements[j]}+${uniqueElements[i]}`;
+      const combo = SYNERGY_COMBOS[key1] || SYNERGY_COMBOS[key2];
+      if (combo) {
+        if (combo.bonus.includes('DPS')) dmgPct += combo.value;
+        if (combo.bonus.includes('Ouro')) goldPct += combo.value;
+        if (combo.bonus.includes('Crítico')) critPct += combo.value;
+        if (combo.bonus === 'DPS+Crítico') { dmgPct += combo.value; critPct += combo.value; }
+      }
+    }
+  }
+
+  return { dmgPct, goldPct, critPct };
 }
 
 // ========== MAIN HOOK ==========
@@ -243,6 +299,24 @@ export function useGameEngine() {
     return 1 + midasLevel * 0.10;
   }, [state.manaUpgrades]);
 
+  const getManaUpgradesBonus = useCallback(() => {
+    const upgrades = state.manaUpgrades;
+    const critLevel = upgrades.find(u => u.id === 'critical_eye')?.level || 0;
+    const speedLevel = upgrades.find(u => u.id === 'swift_blades')?.level || 0;
+    const manaBossLevel = upgrades.find(u => u.id === 'mana_surge')?.level || 0;
+    const hpLevel = upgrades.find(u => u.id === 'iron_skin')?.level || 0;
+    const itemLevel = upgrades.find(u => u.id === 'treasure_sense')?.level || 0;
+    const critDmgLevel = upgrades.find(u => u.id === 'critical_power')?.level || 0;
+    return {
+      critChance: critLevel * 3 / 100,
+      atkSpeed: speedLevel * 8 / 100,
+      manaBoss: 1 + manaBossLevel * 0.15,
+      hpMult: 1 + hpLevel * 0.20,
+      itemChance: itemLevel * 5,
+      critDmg: critLevel * 25 / 100,
+    };
+  }, [state.manaUpgrades]);
+
   const addLog = useCallback((text: string, type: CombatLogEntry['type']) => {
     setState(prev => ({
       ...prev,
@@ -261,13 +335,16 @@ export function useGameEngine() {
         const prestBonuses = computePrestigeBonuses(prev.prestige.upgrades);
         const skillBonuses = computeSkillBonuses(prev.skills);
         const petBonuses = computePetBonuses(prev.pets, prev.activePet);
+        const synergyBonus = computeSynergyBonus(prev.pets);
+        const collectionBonuses = getCollectionBonus(prev.monsterCollection);
+        const manaUpgBonuses = getManaUpgradesBonus();
 
-        // Total multipliers
-        const totalDmgMult = manaMult * prestBonuses.dmgMult * (1 + skillBonuses.dmgPct / 100) * (1 + petBonuses.dmgPct / 100) * (1 + invBonuses.damage);
-        const totalGoldMult = goldMultBase * prestBonuses.goldMult * (1 + skillBonuses.goldPct / 100) * (1 + petBonuses.goldPct / 100) * (1 + invBonuses.goldFind);
-        const totalCritChance = prev.crit.chance + invBonuses.critChance + prestBonuses.critChance + skillBonuses.critChance / 100;
-        const totalCritDmg = prev.crit.multiplier + invBonuses.critDmg + prestBonuses.critDmg;
-        const attackSpeed = Math.max(200, BASE_ATTACK_INTERVAL * (1 - skillBonuses.atkSpeedPct / 100 - petBonuses.atkSpeedPct / 100));
+        // Total multipliers (pets + synergy)
+        const totalDmgMult = manaMult * prestBonuses.dmgMult * (1 + skillBonuses.dmgPct / 100) * (1 + (petBonuses.dmgPct + synergyBonus.dmgPct) / 100) * (1 + invBonuses.damage) * (1 + collectionBonuses.dpsBonus / 100);
+        const totalGoldMult = goldMultBase * prestBonuses.goldMult * (1 + skillBonuses.goldPct / 100) * (1 + (petBonuses.goldPct + synergyBonus.goldPct) / 100) * (1 + invBonuses.goldFind) * (1 + collectionBonuses.goldBonus / 100);
+        const totalCritChance = prev.crit.chance + invBonuses.critChance + prestBonuses.critChance + skillBonuses.critChance / 100 + manaUpgBonuses.critChance + petBonuses.critChancePct / 100 + synergyBonus.critPct / 100;
+        const totalCritDmg = prev.crit.multiplier + invBonuses.critDmg + prestBonuses.critDmg + manaUpgBonuses.critDmg;
+        const attackSpeed = Math.max(200, BASE_ATTACK_INTERVAL * (1 - skillBonuses.atkSpeedPct / 100 - petBonuses.atkSpeedPct / 100 - manaUpgBonuses.atkSpeed));
 
         // Base DPS from heroes
         let baseDps = 0;
@@ -309,6 +386,15 @@ export function useGameEngine() {
             gold += goldAmt;
             totalGoldEarned += goldAmt;
             log(`+${goldAmt} 🪙 ouro`, 'gold');
+
+            // Monster Collection - Discover monster
+            const killedEnemyName = getEnemyName(prev.dungeon.currentDungeon, pos, isBoss);
+            const collectionEntry = Object.values(MONSTER_COLLECTION).find(e => e.name === killedEnemyName);
+            if (collectionEntry && !prev.monsterCollection.includes(collectionEntry.id)) {
+              // New monster discovered!
+              prev.monsterCollection = [...prev.monsterCollection, collectionEntry.id];
+              log(`📖 Novo monstro descoberto: ${killedEnemyName}!`, 'achievement');
+            }
 
             if (isBoss) {
               totalBossKills++;
@@ -457,6 +543,9 @@ export function useGameEngine() {
           crit,
           prestige: prev.prestige,
           skillPoints,
+          monstersDiscovered: prev.monsterCollection.length,
+          bossesDiscovered: Object.values(MONSTER_COLLECTION).filter(m => m.rarity === 'boss' && prev.monsterCollection.includes(m.id)).length,
+          totalMonsters: Object.keys(MONSTER_COLLECTION).length,
         };
 
         for (const achievementDef of ACHIEVEMENT_DEFS) {
@@ -500,6 +589,7 @@ export function useGameEngine() {
           activeSkills: newActiveSkills,
           achievements: newAchievements,
           prestige: { ...prev.prestige },
+          monsterCollection: prev.monsterCollection,
         };
       });
     }, TICK_MS);
@@ -513,9 +603,10 @@ export function useGameEngine() {
     const prestBonuses = computePrestigeBonuses(state.prestige.upgrades);
     const skillBonuses = computeSkillBonuses(state.skills);
     const petBonuses = computePetBonuses(state.pets, state.activePet);
-    const totalDmgMult = manaMult * prestBonuses.dmgMult * (1 + skillBonuses.dmgPct / 100) * (1 + petBonuses.dmgPct / 100) * (1 + invBonuses.damage);
+    const collectionBonuses = getCollectionBonus(state.monsterCollection);
+    const totalDmgMult = manaMult * prestBonuses.dmgMult * (1 + skillBonuses.dmgPct / 100) * (1 + petBonuses.dmgPct / 100) * (1 + invBonuses.damage) * (1 + collectionBonuses.dpsBonus / 100);
     setDps(totalDps(state.heroes, HERO_DEFS, 1) * totalDmgMult);
-  }, [state.heroes, state.manaUpgrades, state.inventory.items, state.prestige.upgrades, state.skills, state.pets, state.activePet]);
+  }, [state.heroes, state.manaUpgrades, state.inventory.items, state.prestige.upgrades, state.skills, state.pets, state.activePet, state.monsterCollection]);
 
   // Auto-save
   useEffect(() => {
@@ -804,6 +895,26 @@ export function useGameEngine() {
       const sellPrice = def ? Math.floor(itemUpgradeCost(def.rarity, item.level) * 0.5) : 10;
       const newItems = prev.inventory.items.filter(i => i.uid !== itemUid);
       return { ...prev, gold: prev.gold + sellPrice, inventory: { ...prev.inventory, items: newItems } };
+    });
+  }, []);
+
+  const sellByRarity = useCallback((rarity: string) => {
+    setState(prev => {
+      let totalGold = 0;
+      const newItems = prev.inventory.items.filter(item => {
+        if (item.equipped) return true;
+        const def = ITEMS.find(i => i.id === item.defId);
+        if (def && def.rarity === rarity) {
+          totalGold += Math.floor(itemUpgradeCost(def.rarity, item.level) * 0.5);
+          return false;
+        }
+        return true;
+      });
+      const soldCount = prev.inventory.items.length - newItems.length;
+      if (soldCount > 0) {
+        // Log will be added through the setState callback
+      }
+      return { ...prev, gold: prev.gold + totalGold, inventory: { ...prev.inventory, items: newItems } };
     });
   }, []);
 
@@ -1187,21 +1298,112 @@ export function useGameEngine() {
     });
   }, []);
 
+  // ========== PET ACTIVE SKILL ==========
+  const activatePetSkill = useCallback(() => {
+    setState(prev => {
+      if (!prev.activePet) return prev;
+      const pet = prev.pets.find(p => p.id === prev.activePet);
+      if (!pet) return prev;
+      const def = PET_DEFS.find(d => d.id === prev.activePet);
+      if (!def) return prev;
+
+      // Check cooldown
+      if ((pet as any).skillCooldownRemaining > 0) return prev;
+
+      const skill = def.activeSkill;
+      let newEnemies = { ...prev.currentEnemy };
+      let newHeroes = [...prev.heroes];
+      const newLogs: CombatLogEntry[] = [];
+      const log = (text: string, type: CombatLogEntry['type']) => {
+        newLogs.push({ id: nextLogId++, text, type, timestamp: Date.now() });
+      };
+
+      // Apply damage
+      if (skill.damage) {
+        const totalDmg = skill.damage / 100;
+        // Simple DPS-based damage
+        const petDmg = Math.floor(prev.currentEnemy.maxHp * totalDmg * 0.1);
+        const newHp = Math.max(0, newEnemies.hp - petDmg);
+        newEnemies = { ...newEnemies, hp: newHp };
+        log(`🐾 ${skill.name}: ${petDmg.toLocaleString()} de dano!`, 'skill');
+      }
+
+      // Apply heal
+      if (skill.heal) {
+        newHeroes = newHeroes.map(h => {
+          if (h.level === 0 || h.isDead) return h;
+          const heroDef = HERO_DEFS.find(d => d.id === h.id)!;
+          const maxHp = heroDef.baseHp * (1 + (h.level - 1) * 0.15);
+          const healAmount = Math.floor(maxHp * skill.heal! / 100);
+          const newHp = Math.min(h.hp + healAmount, maxHp);
+          return { ...h, hp: newHp, maxHp, isDead: false, reviveTimer: 0 };
+        });
+        log(`💚 ${skill.name}: Heróis curados em ${skill.heal}%!`, 'skill');
+      }
+
+      // Apply buff
+      if (skill.buff) {
+        log(`⬆️ ${skill.name}: +${skill.buff.value}% ${skill.buff.stat} por ${skill.buff.duration}s!`, 'skill');
+      }
+
+      // Apply debuff
+      if (skill.debuff) {
+        log(`⬇️ ${skill.name}: ${skill.debuff.value}% ${skill.debuff.stat} inimigo por ${skill.debuff.duration}s!`, 'skill');
+      }
+
+      // Set cooldown on pet
+      const updatedPets = prev.pets.map(p => {
+        if (p.id !== prev.activePet) return p;
+        return { ...p, skillCooldownRemaining: skill.cooldown };
+      });
+
+      return {
+        ...prev,
+        currentEnemy: newEnemies,
+        heroes: newHeroes,
+        pets: updatedPets,
+        combatLog: [...newLogs, ...prev.combatLog].slice(0, LOG_MAX),
+      };
+    });
+  }, []);
+
+  // Tick pet skill cooldown
+  useEffect(() => {
+    if (isPaused) return;
+    const interval = setInterval(() => {
+      setState(prev => {
+        let changed = false;
+        const updatedPets = prev.pets.map(p => {
+          const cd = (p as any).skillCooldownRemaining || 0;
+          if (cd > 0) {
+            changed = true;
+            return { ...p, skillCooldownRemaining: Math.max(0, cd - 1) };
+          }
+          return p;
+        });
+        return changed ? { ...prev, pets: updatedPets } : prev;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isPaused]);
+
   const resetGame = useCallback(() => {
     localStorage.removeItem(SAVE_KEY);
     setState(getInitialState());
   }, []);
 
   const togglePause = useCallback(() => setIsPaused(p => !p), []);
-  const manualSave = useCallback(() => saveGame(stateRef.current), []);    return {
+  const manualSave = useCallback(() => saveGame(stateRef.current), []);
+    return {
     state, dps, isPaused, enemyName,
     upgradeHero, bulkUpgradeHero, evolveHero, buyManaUpgrade, resetGame, togglePause, manualSave,
-    equipItem, unequipItem, sellItem, healAllHeroes, equipBestForHero, equipBestForAll,
+    equipItem, unequipItem, sellItem, sellByRarity, healAllHeroes, equipBestForHero, equipBestForAll,
     unlockPet, setActivePet, levelUpPet,
     upgradeSkill,
     ascend, buyPrestigeUpgrade,
     buyShopItem,
     activateSkill,
+    activatePetSkill,
     claimDailyReward,
     getManaMult, getGoldMult,
     getEnemyDisplayName: () => getEnemyName(state.dungeon.currentDungeon, state.dungeon.currentStage, state.dungeon.currentStage === 10),

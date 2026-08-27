@@ -19,6 +19,8 @@ import { StatsPanel } from './components/StatsPanel';
 import { NewsGuidePanel } from './components/NewsGuidePanel';
 import { AchievementPanel } from './components/AchievementPanel';
 import { AchievementNotification } from './components/AchievementNotification';
+import { MonsterDex } from './components/MonsterDex';
+import { MonsterDiscoveryNotification } from './components/MonsterDiscoveryNotification';
 import { DailyRewardPanel } from './components/DailyRewardPanel';
 import { HeroSprite } from './components/HeroSprite';
 import { ActiveSkillBar } from './components/ActiveSkillBar';
@@ -28,6 +30,7 @@ import { toggleMute, getMuted } from './utils/sounds';
 import { calculatePowerLevel, formatPowerLevel, getPowerRank } from './utils/powerLevel';
 import { MANA_UPGRADES } from './data/gameData';
 import { ACHIEVEMENT_DEFS } from './data/achievements';
+import { MONSTER_COLLECTION } from './data/monsterCollection';
 import { CHANGELOG } from './data/newsGuide';
 import { getCurrentTier } from './data/evolutions';
 import { getEvolutionMultiplier } from './utils/formatters';
@@ -52,12 +55,13 @@ export default function App() {
   const {
     state, dps, isPaused,
     upgradeHero, bulkUpgradeHero, evolveHero, buyManaUpgrade, resetGame, togglePause, manualSave,
-    equipItem, unequipItem, sellItem, healAllHeroes, equipBestForHero, equipBestForAll,
+    equipItem, unequipItem, sellItem, sellByRarity, healAllHeroes, equipBestForHero, equipBestForAll,
     unlockPet, setActivePet, levelUpPet,
     upgradeSkill,
     ascend, buyPrestigeUpgrade,
     buyShopItem,
     activateSkill,
+    activatePetSkill,
     claimDailyReward,
     getManaMult, getGoldMult,
     getEnemyDisplayName, getDungeonName,
@@ -69,8 +73,10 @@ export default function App() {
 
   const [showGallery, setShowGallery] = useState(false);
   const [showAchievements, setShowAchievements] = useState(false);
+  const [showMonsterDex, setShowMonsterDex] = useState(false);
   const [showDailyRewards, setShowDailyRewards] = useState(false);
   const [newAchievement, setNewAchievement] = useState<typeof ACHIEVEMENT_DEFS[0] | null>(null);
+  const [discoveredMonster, setDiscoveredMonster] = useState<any>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [showNewsGuide, setShowNewsGuide] = useState(false);
   const [sideTab, setSideTab] = useState<SideTab>('heroes');
@@ -98,6 +104,24 @@ export default function App() {
   const powerLevel = calculatePowerLevel(state);
   const formattedPower = formatPowerLevel(powerLevel);
   const powerRank = getPowerRank(powerLevel);
+
+  // Monster discovery notification
+  const prevCollectionRef = React.useRef<string[]>([]);
+  useEffect(() => {
+    const prevCollection = prevCollectionRef.current;
+    const currentCollection = state.monsterCollection;
+    
+    // Check for new discoveries
+    if (currentCollection.length > prevCollection.length) {
+      const newId = currentCollection[currentCollection.length - 1];
+      const monsterEntry = Object.values(MONSTER_COLLECTION).find(e => e.id === newId);
+      if (monsterEntry) {
+        setDiscoveredMonster(monsterEntry);
+      }
+    }
+    
+    prevCollectionRef.current = currentCollection;
+  }, [state.monsterCollection]);
 
   // Count unread updates
   const unreadCount = CHANGELOG.filter(u => !readUpdates.has(u.id)).length;
@@ -256,7 +280,7 @@ export default function App() {
             </div>
             <div className="relative">
               <div className="castle-hover-ring absolute -inset-2 rounded-xl transition-all duration-300 opacity-0" style={{ background: 'radial-gradient(circle, rgba(167,139,250,0.15) 0%, transparent 70%)', border: '1px solid rgba(167,139,250,0.2)', transform: 'scale(0.8)' }} />
-              <img src="/sprites/castle.png" alt="" className="castle-idle" style={{ width: '36px', height: '36px', objectFit: 'contain' }} />
+              <img src="/castle-icon.svg" alt="" className="castle-idle" style={{ width: '36px', height: '36px', objectFit: 'contain', imageRendering: 'pixelated' }} />
             </div>
             <div>
               <h1 className="text-sm font-black tracking-tight" style={{ background: 'linear-gradient(135deg, #a78bfa, #fbbf24, #f87171)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
@@ -279,6 +303,9 @@ export default function App() {
             </button>
             <button onClick={() => setShowDailyRewards(true)} className="btn-ghost text-[11px] px-3 py-1.5">
               🎁 Diário
+            </button>
+            <button onClick={() => setShowMonsterDex(true)} className="btn-ghost text-[11px] px-3 py-1.5">
+              📖 Dex
             </button>
             <button onClick={() => setShowAchievements(true)} className="btn-ghost text-[11px] px-3 py-1.5">
               🏆 Conquistas
@@ -425,7 +452,7 @@ export default function App() {
                   })}
                 </div>
               )}
-              {sideTab === 'inventory' && <InventoryPanel items={state.inventory.items} maxSlots={state.inventory.maxSlots} gold={state.gold} heroes={state.heroes} heroDefs={HERO_DEFS} onEquip={equipItem} onUnequip={unequipItem} onSell={sellItem} onEquipBestAll={equipBestForAll} />}
+              {sideTab === 'inventory' && <InventoryPanel items={state.inventory.items} maxSlots={state.inventory.maxSlots} gold={state.gold} heroes={state.heroes} heroDefs={HERO_DEFS} onEquip={equipItem} onUnequip={unequipItem} onSell={sellItem} onSellByRarity={sellByRarity} onEquipBestAll={equipBestForAll} />}
               {sideTab === 'pets' && <PetPanel pets={state.pets} activePet={state.activePet} totalKills={state.totalKills} highestDungeon={state.highestDungeon} totalGoldEarned={state.totalGoldEarned} mana={state.mana} inventoryItemCount={state.inventory.items.length} gold={state.gold} onUnlock={unlockPet} onSetActive={setActivePet} onLevelUp={levelUpPet} />}
               {sideTab === 'skills' && <SkillTreePanel skills={state.skills} skillPoints={state.skillPoints} onUpgrade={upgradeSkill} />}
               {sideTab === 'prestige' && <PrestigePanel prestige={state.prestige} completedDungeons={state.dungeon.completedDungeons} onAscend={ascend} onBuyUpgrade={buyPrestigeUpgrade} />}
@@ -500,6 +527,9 @@ export default function App() {
           heroes={state.heroes}
           activeSkills={state.activeSkills}
           onActivateSkill={activateSkill}
+          activePet={state.activePet}
+          pets={state.pets}
+          onActivatePetSkill={activatePetSkill}
         />
       </main>
 
@@ -524,6 +554,16 @@ export default function App() {
         />
       )}
 
+      {showMonsterDex && (
+        <MonsterDex
+          highestDungeon={state.highestDungeon}
+          completedDungeons={state.dungeon.completedDungeons}
+          totalKills={state.totalKills}
+          monsterCollection={state.monsterCollection}
+          onClose={() => setShowMonsterDex(false)}
+        />
+      )}
+
       {showAchievements && (
         <AchievementPanel
           achievements={state.achievements}
@@ -539,6 +579,12 @@ export default function App() {
             crit: state.crit,
             prestige: state.prestige,
             skillPoints: state.skillPoints,
+            monstersDiscovered: state.monsterCollection.length,
+            bossesDiscovered: Object.keys(MONSTER_COLLECTION).filter(id => {
+              const entry = MONSTER_COLLECTION[id];
+              return entry && entry.rarity === 'boss' && state.monsterCollection.includes(entry.id);
+            }).length,
+            totalMonsters: Object.keys(MONSTER_COLLECTION).length,
           }}
           onClose={() => setShowAchievements(false)}
         />
@@ -629,6 +675,12 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Monster Discovery Notification */}
+      <MonsterDiscoveryNotification
+        monster={discoveredMonster}
+        onDismiss={() => setDiscoveredMonster(null)}
+      />
     </div>
   );
 }

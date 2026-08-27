@@ -394,7 +394,7 @@ export function HeroProfile({ hero, heroDef, gold, manaMult, totalGoldEarned, in
                         <span className="text-xl">{petDef.icon}</span>
                         <div className="flex-1">
                           <div className="text-[11px] font-bold text-[#f1f5f9]">{petDef.name} Lv.{petState.level}</div>
-                          <div className="text-[9px] text-[#475569]">{petDef.effect}</div>
+                          <div className="text-[9px] text-[#475569]">{petDef.passives[0]?.effectLabel || petDef.description}</div>
                         </div>
                         <button onClick={() => onSetPet(null)} className="text-[9px] px-2 py-1 rounded-lg font-bold cursor-pointer" style={{ background: 'rgba(248,113,113,0.1)', color: '#fca5a5', border: '1px solid rgba(248,113,113,0.15)' }}>
                           Remover
@@ -414,7 +414,7 @@ export function HeroProfile({ hero, heroDef, gold, manaMult, totalGoldEarned, in
                     <span className="text-lg">{def.icon}</span>
                     <div className="flex-1">
                       <div className="text-[11px] font-bold text-[#f1f5f9]">{def.name} Lv.{pet.level}</div>
-                      <div className="text-[9px]" style={{ color: PET_TYPE_COLORS[def.type] }}>{PET_TYPE_NAMES[def.type]} · {def.effect}</div>
+                      <div className="text-[9px]" style={{ color: PET_TYPE_COLORS[def.type] }}>{PET_TYPE_NAMES[def.type]} · {def.passives[0]?.effectLabel || def.description}</div>
                     </div>
                     <button onClick={() => onSetPet(pet.id)} className="text-[9px] px-2 py-1 rounded-lg font-bold cursor-pointer" style={{ background: 'rgba(52,211,153,0.1)', color: '#34d399', border: '1px solid rgba(52,211,153,0.15)' }}>
                       Ativar
