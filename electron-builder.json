@@ -1,0 +1,23 @@
+{
+  "appId": "com.dungeon-idle-conquest.app",
+  "productName": "Projeto Dungeon Idle Conquest",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "dist/**/*",
+    "electron-main.cjs",
+    "public/sprites/castle.png"
+  ],
+  "win": {
+    "target": "nsis",
+    "icon": "build/icon.ico"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Projeto Dungeon Idle Conquest"
+  }
+}

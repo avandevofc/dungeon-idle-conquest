@@ -1,0 +1,17 @@
+{
+  "short_name": "DIC",
+  "name": "Dungeon Idle Conquest",
+  "icons": [
+    {
+      "src": "/castle-icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0a0a0f",
+  "theme_color": "#aa55ff",
+  "display": "standalone",
+  "orientation": "portrait"
+}
