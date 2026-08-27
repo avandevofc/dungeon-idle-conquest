@@ -3,18 +3,10 @@ import path from 'path';
 import bcrypt from 'bcryptjs';
 import fs from 'fs';
 
-// Funciona tanto em ESM quanto em CJS (production bundle)
-let __dirname: string;
-try {
-  __dirname = path.dirname(new URL(import.meta.url).pathname);
-} catch {
-  __dirname = process.cwd();
-}
-
-const DB_PATH = path.join(__dirname, 'data', 'game.db');
+// Usar process.cwd() para encontrar o diretório do projeto de forma confiável
+const DB_PATH = path.join(process.cwd(), 'data', 'game.db');
 
 // Criar diretório de dados se não existir
-import fs from 'fs';
 const dataDir = path.dirname(DB_PATH);
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
